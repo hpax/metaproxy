@@ -17,6 +17,10 @@ A client MUST NOT attempt to negotiate this protocol if it not able to
 accept a socket file descriptor for any reason, and a server MUST NOT
 attempt to grant such a request if it is unable to transmit one.
 
+Note: the following description uses the byte 0xFD as the
+authentication mechanism and status code; those are temporary values
+pending a permanent assignment.
+
 To negotiate this protocol, a client includes the byte 0xFD as one of
 the single-byte authentication mechanisms it is able to use. Once
 offered, a client MUST be prepared to accept a file descriptor, no
@@ -35,12 +39,14 @@ type, which then proceeds as usual. If the server specifies 0xFD as
 the authentication method, the session will proceed exactly as if
 authentication method 0x00 (no authentication) was negotiated.
 
-Once the client has offered authentication method 0xFD, no matter what
-authentication method is actually negotiated, the server MAY pass a
-socket file descriptor instead of proxying the data connection. The
-socket file descriptor MUST be attached to the first byte (VER field)
-of the request response message. The server MUST NOT provide a file
-descriptor unless the connection is successful.
+Once the client has offered authentication method 0xFD and the
+connection is successful, no matter what authentication method is
+actually negotiated, the server MAY pass a socket file descriptor
+instead of proxying the data connection, and transmit a status code
+0xFD instead of 0x00. The socket file descriptor MUST be attached to
+the first byte (VER field) of the request response message. The server
+MUST NOT provide a file descriptor unless the connection is
+successful.
 
 If no file descriptor is exchanged, but the connection is successful,
 both the server and the client MUST proceed according to the unmodified
@@ -49,16 +55,31 @@ SOCKS5 protocol.
 If the server provides a file descriptor, it MUST be a socket, but it
 MAY be a different address family than the client originally requested.
 
-For a CONNECT request (type 0x01), the file descriptor passed MUST be
-a connected stream socket. The client MAY close the control connection
-any time after receiving the response message.
+For a CONNECT request (type 0x01):
+
+The file descriptor passed MUST be a connected stream socket. The
+client MAY close the control connection any time after receiving the
+response message.
 
 Note: The following operations are not yet implemented by metaproxy.
 
-For a BIND request (type 0x02), the file descriptor MUST be a
-listening stream socket, which is passed as part of the first reply
-message. No second reply message is passed. The client MAY close the
-control connection any time after receiving the initial reponse.
+For a BIND request (type 0x02):
+
+If a file descriptor is attached to the first response message, it
+MUST be a listening stream socket. In that case, there is no second
+response packet and the client MAY treat the listening socket as if it
+were directly connected to the Internet for the purpose of this
+association.  The client MUST still leave the control connection open,
+as the server still MAY terminate the validity of the association
+(e.g. by controlling firewall rules or routing) when the control
+connection is closed.)
+
+The client MAY close the control connection at any
+time after receiving the response message.
+
+If a file descriptor is attached to the second response message, it
+MUST be a connected stream socket. The client MAY close the control
+connection at any time after receiving the response message.
 
 For a UDP ASSOCATE request (type 0x03), the file descriptor MUST be a
 connected or unconnected datagram socket. The client MUST maintain the

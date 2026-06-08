@@ -61,9 +61,11 @@ using the operating system's ancillary message (SCM_RIGHTS) mechanism.
 Once the client holds the passed socket, it communicates directly with
 the remote endpoint without any further involvement of the proxy
 server, eliminating the per-byte overhead of data proxying after the
-initial negotiation is complete.  A new SOCKS5 authentication method
-code (value TBD, to be assigned by IANA) is defined to signal client
-capability for file descriptor receipt.  BIND and UDP ASSOCIATE
+initial negotiation is complete.  Two new code values (each assigned
+by IANA from the appropriate registry) are defined: an authentication
+method code TBD to signal client capability for file descriptor receipt,
+and a reply status code TBD that the server sets in the REP field
+whenever it attaches a file descriptor to a reply message.  BIND and UDP ASSOCIATE
 semantics are extended correspondingly.
 
 ## Status of This Memo
@@ -117,6 +119,10 @@ document.
   6.4.  Message Flow
 7.   CONNECT Request Handling
 8.   BIND Request Handling
+  8.1.  Overview
+  8.2.  Association Mode
+  8.3.  Connection Mode
+  8.4.  Fallback Behavior
 9.   UDP ASSOCIATE Request Handling
   9.1.  Overview
   9.2.  Connected Socket Semantics
@@ -161,14 +167,19 @@ client holds that socket, it communicates with the remote endpoint
 without any further involvement of the proxy server.
 
 This document specifies an extension to SOCKS5 that makes use of this
-capability.  A new authentication method code TBD is defined for
-use in SOCKS5 method negotiation.  A client that includes TBD in its
-method offer signals that it is capable of receiving a socket file
-descriptor.  A server that supports the extension may attach an open
-socket file descriptor to its SOCKS5 reply message as SCM_RIGHTS
-ancillary data.  The client then uses the received socket directly for
-all subsequent data transfer, and the proxy server is freed from the
-data-forwarding burden.
+capability.  Two new code values are defined, each assigned by IANA
+from its respective registry.  First, authentication method code TBD
+is defined for use in SOCKS5 method negotiation: a client that includes
+TBD in its method offer signals that it is capable of receiving a
+socket file descriptor.  Second, reply status code TBD is defined as
+the value the server sets in the REP field whenever it attaches a file
+descriptor to a reply message, providing an explicit in-band signal
+that an FD accompanies the reply.
+A server that supports the extension may attach an open socket file
+descriptor to its SOCKS5 reply message as SCM_RIGHTS ancillary data.
+The client then uses the received socket directly for all subsequent
+data transfer, and the proxy server is freed from the data-forwarding
+burden.
 
 The extension is necessarily limited to transport channels that support
 file descriptor passing.  This specification assumes the POSIX SCM_RIGHTS
@@ -205,7 +216,10 @@ The following terms from [RFC1928] are used throughout this document:
 
 **REP**
 : The reply code byte in a SOCKS5 reply message.  A value of 0x00
-  indicates success.
+  indicates success without an attached file descriptor.  A value of
+  TBD indicates success with an attached file descriptor (see
+  Section 6.2).  Other values indicate errors as defined in
+  [RFC1928].
 
 **ATYP**
 : The address type indicator byte.
@@ -234,10 +248,13 @@ The following additional terms are defined for use in this document:
 
 **Control connection**
 : The Unix domain socket connection over which the SOCKS5 negotiation
-  takes place.  For CONNECT and BIND requests with file descriptor
-  passing, the control connection may be closed by the client after
-  receiving the reply.  For UDP ASSOCIATE, the control connection must
-  remain open for the duration of the association.
+  takes place.  For CONNECT requests and BIND requests in connection
+  mode (Section 8.3), the control connection may be closed by the
+  client after receiving the final reply with an attached file
+  descriptor.  For BIND requests in association mode (Section 8.2)
+  and for UDP ASSOCIATE, the control connection must remain open for
+  the duration of the association; the server MAY revoke the
+  association when the control connection closes.
 
 **File descriptor (FD)**
 : An open file descriptor representing a socket, as transferred between
@@ -295,7 +312,7 @@ to the client process.  The key design points are:
 3. **FD delivery.**  If the server elects to pass a file descriptor
    for a successful request, it attaches the socket as SCM_RIGHTS
    ancillary data to the send call that carries the first byte (VER)
-   of the SOCKS5 reply message.
+   of the SOCKS5 reply message, and sets the REP field to TBD.
 
 4. **Backward compatibility.**  If the server does not pass a file
    descriptor, and the reply indicates success, both sides proceed with
@@ -337,6 +354,14 @@ authentication method the server ultimately selects in its ServerHello.
 The obligation to accept an FD arises from having offered TBD, not
 from the server having selected it.  The mechanism by which the client
 detects an attached file descriptor is described in Section 6.3.
+
+Note: The code value TBD serves two distinct roles in this protocol.
+As an authentication method code (in the METHODS field of ClientHello
+and the METHOD field of ServerHello), it signals the client's
+capability to receive file descriptors.  As a reply status code (in
+the REP field of the SOCKS5 reply message), it signals that the server
+has attached a file descriptor to the reply.  Both roles require
+separate IANA assignments; see Section 11.
 
 ### 4.2. Server Selection
 
@@ -445,10 +470,12 @@ with the rest of the reply.
 
 ### 6.2. Preconditions
 
-The server MUST NOT attach a file descriptor to a reply message unless
-the reply code (REP) indicates success (REP = 0x00).  If the requested
-connection fails for any reason, the server MUST NOT attach a file
-descriptor to the error reply.
+When the server attaches a file descriptor to a reply message, it
+MUST set the REP field to TBD.  The server MUST NOT attach a file
+descriptor to a reply message that uses any other REP value; in
+particular, the server MUST NOT attach a file descriptor to an error
+reply.  A successful reply that does not include an attached file
+descriptor uses REP = 0x00 as in the unmodified SOCKS5 protocol.
 
 The file descriptor attached MUST be a socket.  It MAY be of a
 different address family or protocol type than the client originally
@@ -466,18 +493,23 @@ failed, and close the control connection.
 
 ### 6.3. Fallback Behavior
 
-If the server does not attach a file descriptor to a successful reply
-(REP = 0x00), both the server and the client MUST proceed according to
-the unmodified SOCKS5 protocol as defined in [RFC1928].  The client
-MUST be prepared for this fallback regardless of whether it offered
-method code TBD, because the server is never obligated to exercise file descriptor
-passing.
+If the server does not attach a file descriptor, a successful reply
+carries REP = 0x00, and both the server and the client MUST proceed
+according to the unmodified SOCKS5 protocol as defined in [RFC1928].
+The client MUST be prepared for this fallback regardless of whether it
+offered method code TBD, because the server is never obligated to
+exercise file descriptor passing.
 
 The client determines whether a file descriptor was passed by examining
-the ancillary data accompanying the receive call that delivers the VER
-byte of the reply.  If no SCM_RIGHTS ancillary data is present on that
-receive, the client MUST treat the session as a standard SOCKS5
-session.
+both the ancillary data and the REP field of the receive call that
+delivers the VER byte of the reply.  A reply with REP = TBD and
+SCM_RIGHTS ancillary data carrying exactly one file descriptor
+indicates successful FD delivery.  A reply with REP = 0x00 and no
+ancillary data indicates a successful but non-FD session that follows
+standard SOCKS5.  A reply with REP = TBD but no accompanying
+SCM_RIGHTS data, or with SCM_RIGHTS data but REP ≠ TBD, constitutes
+a protocol error; the client MUST treat the session as failed and
+close the control connection.
 
 ### 6.4. Message Flow
 
@@ -502,7 +534,7 @@ Client                                             Server
   |    DST.PORT                                       |
   |                                                   |
   |<-- SOCKS5 Reply [SCM_RIGHTS: socket fd] ----------|
-  |    VER=5, REP=0x00, RSV=0, ATYP,                 |
+  |    VER=5, REP=TBD, RSV=0, ATYP,                  |
   |    BND.ADDR, BND.PORT                             |
   |                                                   |
   |    (Client closes control connection when done)   |
@@ -567,32 +599,68 @@ connection, as specified in [RFC1928].
 
 ## 8. BIND Request Handling
 
-For a BIND request (CMD = 0x02), if the server elects to pass a file
-descriptor, the following requirements apply.
+### 8.1. Overview
 
-The file descriptor passed MUST be a listening stream socket bound to a
-local address at which the server is willing to accept an inbound
-connection on behalf of the client.
+For a BIND request (CMD = 0x02), the server may elect to pass a file
+descriptor in one of two modes, depending on its capabilities and
+policy.  In association mode, the server passes a listening socket in
+the first reply message and the client accepts inbound connections
+directly.  In connection mode, the server sends a standard first reply
+announcing the bound address and then passes a connected socket in the
+second reply message.  If the server passes no file descriptor in
+either mode, the operation falls back to standard SOCKS5 BIND.
 
-The BIND operation with file descriptor passing deviates from the
-standard SOCKS5 BIND operation as follows.  In the standard protocol,
-BIND produces two reply messages: the first conveys the address to
-which the server has bound, and the second signals the arrival of the
-inbound connection (see Section 6 of [RFC1928]).  When a file
-descriptor is passed, only the first reply message is sent.  The
-server passes the listening socket in that first reply message and
-sends no second reply.  The client accepts inbound connections directly
-by calling accept() on the received socket file descriptor.
+### 8.2. Association Mode
 
-The BND.ADDR and BND.PORT fields of the first reply message MUST
-contain the address and port to which the listening socket is bound.
+In association mode, the server MAY attach a file descriptor to the
+first reply message.  The following requirements apply.
 
-Upon receiving the first reply message with the attached file
+The file descriptor passed MUST be a listening stream socket.  The
+BND.ADDR and BND.PORT fields of the first reply message MUST contain
+the address and port to which the listening socket is bound.  REP in
+the first reply MUST be set to TBD.
+
+There is no second reply message in this mode.  The client accepts
+inbound connections directly by calling accept() on the received file
+descriptor.
+
+The client MUST maintain the control connection for the duration of
+the association.  The server MAY enforce access control, firewall
+rules, or routing policy tied to the existence of the control
+connection and SHOULD revoke any such policy when the control
+connection closes.  To terminate the association, the client MUST
+close the control connection and SHOULD close the received socket.
+
+### 8.3. Connection Mode
+
+In connection mode, the server sends two reply messages, similar to
+the standard SOCKS5 BIND operation described in Section 6 of
+[RFC1928].
+
+The first reply message is sent after the server has bound a local
+address.  This reply carries REP = 0x00 and no attached file
+descriptor, and the BND.ADDR and BND.PORT fields contain the address
+and port to which the server has bound.  The client uses this
+information to coordinate with the peer that will initiate the inbound
+connection.
+
+After the inbound connection arrives, the server sends the second
+reply message.  This reply carries REP = TBD, and the server MUST
+attach a connected stream socket as SCM_RIGHTS ancillary data to the
+send call that transmits the VER byte of this second reply.  The
+attached socket MUST be connected to the inbound peer.
+
+Upon receiving the second reply message with the attached file
 descriptor, the client MAY close the control connection at any time.
+The client uses the received socket directly for all subsequent data
+exchange with the inbound peer.
 
-If no file descriptor is attached to the reply, the client and server
-MUST proceed with the standard SOCKS5 BIND operation as specified in
-Section 6 of [RFC1928], including the second reply message.
+### 8.4. Fallback Behavior
+
+If no file descriptor is attached in either reply, the client and
+server MUST proceed with the standard SOCKS5 BIND operation as
+specified in Section 6 of [RFC1928], including the second reply
+message.
 
 
 ## 9. UDP ASSOCIATE Request Handling
@@ -809,11 +877,28 @@ request number 1453807.
 ~~~
 
 The assigned value will be used as the method code throughout this
-specification wherever "TBD" appears.
+specification wherever "TBD" appears in the context of authentication
+method negotiation.
 
-\[RFC Editor note: Replace TBD with the IANA-assigned method code
-value and replace RFCXXXX with the RFC number assigned to this
-document.\]
+### SOCKS Reply Codes Registry
+
+IANA is requested to assign a value in the "SOCKS Reply Codes"
+registry for the following entry.
+
+~~~
++-------+----------------------------------------------+-----------+
+| Value | Description                                  | Reference |
++-------+----------------------------------------------+-----------+
+| TBD   | File Descriptor Passed (Unix Domain Socket)  | [RFCXXXX] |
++-------+----------------------------------------------+-----------+
+~~~
+
+The assigned value will be used as the reply status code (REP field)
+throughout this specification wherever "TBD" appears in the context of
+a SOCKS5 reply message carrying an attached file descriptor.
+
+\[RFC Editor note: Replace TBD with the IANA-assigned code value and
+replace RFCXXXX with the RFC number assigned to this document.\]
 
 
 ## 12. References
