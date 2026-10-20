@@ -34,13 +34,13 @@ normative:
 
 informative:
   RFC1929:
-  POSIX.1-2017:
-    title: "The Open Group Base Specifications Issue 7, 2018 edition
-           (IEEE Std 1003.1-2017)"
+  POSIX.1-2024:
+    title: "The Open Group Base Specifications Issue 8, 2024 edition
+           (IEEE Std 1003.1-2024)"
     author:
       org: IEEE and The Open Group
     date: 2017
-    target: https://pubs.opengroup.org/onlinepubs/9699919799/
+    target: https://pubs.opengroup.org/onlinepubs/9799919799/
 ---
 
 ~~~
@@ -160,7 +160,7 @@ process that establishes network connections on behalf of less-privileged
 applications), the conventional proxying model wastes resources.  The
 operating system already provides a mechanism to pass open file
 descriptors between processes as ancillary data attached to a Unix
-domain socket message.  This mechanism, defined by POSIX [POSIX.1-2017]
+domain socket message.  This mechanism, defined by POSIX [POSIX.1-2024]
 and commonly known as `SCM_RIGHTS`, allows the server to transfer the
 established socket connection directly to the client process.  Once the
 client holds that socket, it communicates with the remote endpoint
@@ -273,7 +273,7 @@ The following additional terms are defined for use in this document:
 **SCM_RIGHTS**
 : The POSIX ancillary data type used to pass open file descriptors
   between processes as ancillary data on a Unix domain socket message,
-  as specified in [POSIX.1-2017].
+  as specified in [POSIX.1-2024].
 
 **SCM_CREDENTIALS**
 : A Linux-specific ancillary data type that conveys the PID, UID, and
@@ -939,10 +939,10 @@ assigned to this document.\]
   RFC 1929, DOI 10.17487/RFC1929, March 1996.
   &lt;https://www.rfc-editor.org/info/rfc1929&gt;
 
-**[POSIX.1-2017]**
+**[POSIX.1-2024]**
 : IEEE and The Open Group, "The Open Group Base Specifications
-  Issue 7, 2018 edition (IEEE Std 1003.1-2017)", 2017.
-  &lt;https://pubs.opengroup.org/onlinepubs/9699919799/&gt;
+  Issue 8, 2024 edition (IEEE Std 1003.1-2024)", 2024.
+  &lt;https://pubs.opengroup.org/onlinepubs/9799919799/&gt;
 
 
 ## Author's Address
